@@ -11,6 +11,8 @@ path = "20180719_tour1_raw.csv"
 data = pd.read_csv(path, sep = ",", header = 0,  na_values=(16777200), parse_dates=['Time'])
 
 print(data['Time'] - datetime.datetime(2018, 7, 19))
+diff = data['Time'] - datetime.datetime(2018, 7, 19)
+diff = int(str(diff[0])[0:4])
 
 
 data['Time'] = data['Time'] - pd.Timedelta(days = 1229, hours=2)
