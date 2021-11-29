@@ -1,15 +1,20 @@
-
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import math
-
+from scipy.stats.stats import pearsonr, spearmanr, kendalltau
+import seaborn as sbn
+from scipy.stats import norm
+from statsmodels.graphics.gofplots import qqplot
+from sklearn.linear_model import LinearRegression
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.ensemble import RandomForestRegressor
 
 path = "your_qgis_output.csv"
 
 data = pd.read_csv(path, sep = ",")
 
-data.columns = ['trackpoint', 'ufp', 'ufp-min', 'ufp_rel', 'street_class', 'kfz', 'lkw', 'tot_traffic', 'traffic_norm']
+data.columns = ['trackpoint', 'ufp', 'street_class', 'kfz', 'lkw', 'tot_traffic']
 data.set_index("trackpoint", inplace=True)
 
 
@@ -17,12 +22,10 @@ data.set_index("trackpoint", inplace=True)
 where_nan = data['ufp'].isna()
 data = data[~where_nan]
 
-traffic_subset = data[~data['traffic_norm'].isna()]
+traffic_subset = data[~data['tot_traffic'].isna()]
 data['street_class'].fillna('No_street', inplace=True)
 
 ##
-from scipy.stats.stats import pearsonr, spearmanr, kendalltau
-
 corr_traff = pearsonr(traffic_subset['traffic_norm'], traffic_subset['ufp'])    # Pearson nimmt normalverteilte Daten an!
 print("------ Pearson's Korrelationskoeffizient -----")
 print('r = %.3f      p = %.3E' % (corr_traff[0], corr_traff[1]))
@@ -34,19 +37,16 @@ data.iloc[:, 2:-1].corr()
 
 
 ## Verteilungen
-import seaborn as sbn
-from scipy.stats import norm
-from statsmodels.graphics.gofplots import qqplot
 
 # Wir sehen aber, dass die Daten nicht normalverteilt sind.
 sbn.distplot(data['ufp'], kde=False, color='blue', bins=100)
-plt.title('UFP-Konzentration entlang der Messroute', fontsize=18)
+plt.title('Absolute Häufigkeitsverteilung der UFP-Konzentration', fontsize=18)
 plt.xlabel('Konzentration [#/cm^3]', fontsize=16)
 plt.ylabel('Häufigkeitsdichte', fontsize=16)
 plt.show()
 
 sbn.distplot(data['ufp'], color='blue', bins=100)
-plt.title('UFP-Konzentration entlang der Messroute', fontsize=18)
+plt.title('Relative Häufigkeitsverteilung der UFP-Konzentration', fontsize=18)
 plt.xlabel('Konzentration [#/cm^3]', fontsize=16)
 plt.ylabel('Relative Häufigkeitsdichte', fontsize=16)
 mu, std = norm.fit(data['ufp'])
@@ -113,12 +113,11 @@ def corr_check(x, y, significance=0.05, method="spearman"):
     if method == "spearman":
         coeff, pvalue = spearmanr(x, y)
         print("------ Spearman's Rangkorrelationskoeffizient (rho) -----")
+        print('ρ = %.3f' % coeff)
     elif method == "kendalltau":
         coeff, pvalue = kendalltau(x, y)
         print("------ Kendall's Rangkorrelationskoeffizient (tau) -----")
-        print('Kendall correlation coefficient: τ = %.3f' % k_coef2)
-
-    print('ρ = %.3f' % coeff)
+        print('τ = %.3f' % coeff)
 
     if pvalue > significance:
         print('Stichproben korrelieren nicht mit p=%.3E' % pvalue)
@@ -127,8 +126,8 @@ def corr_check(x, y, significance=0.05, method="spearman"):
     print("\n")
 
 
-corr_check(traffic_subset['traffic_norm'], traffic_subset['ufp'])   # Spearmans rank correlation (lineare und nicht-lineare Zusammenhänge, sensitiver gegenüber Fehlern/Diskrepanzen in den Daten)
-corr_check(traffic_subset['traffic_norm'], traffic_subset['ufp'], method="kendalltau")    # Kendall's tau correlation (unempfindlicher)
+corr_check(traffic_subset['tot_traffic'], traffic_subset['ufp'])   # Spearmans rank correlation (lineare und nicht-lineare Zusammenhänge, sensitiver gegenüber Fehlern/Diskrepanzen in den Daten)
+corr_check(traffic_subset['tot_traffic'], traffic_subset['ufp'], method="kendalltau")    # Kendall's tau correlation (unempfindlicher)
 
 ##
 corr_check(data['street_class'], data['ufp'])
@@ -136,8 +135,6 @@ corr_check(data['street_class'], data['ufp'], method='kendalltau')
 
 
 ## Univariate lineare Regression:
-
-from sklearn.linear_model import LinearRegression
 
 predictor = 'kfz'
 X = traffic_subset[[predictor]].to_numpy()
@@ -162,7 +159,7 @@ print('Funktion: y = %.3f * x + %.3f' % (linear_regressor.coef_[0], linear_regre
 print("R² Score: {:.2f}".format(linear_regressor.score(X, Y)))
 print("\n")
 
-## Multivariate lineare Regression:
+## Multivariate lineare Regression (nur zu Demonstrationszwecken! Massive Multikolinearität, da Prädiktoren stark korrelieren!):
 
 predictor1 = 'tot_traffic'
 predictor2 = 'lkw'
@@ -173,7 +170,7 @@ linear_regressor.fit(feature, result)
 result_pred = linear_regressor.predict(feature)
 
 plt.scatter(result, result_pred)
-plt.xlabel(str('Gemessene UFP-Konzentration [#/cm^3]'))
+plt.xlabel('Gemessene UFP-Konzentration [#/cm^3]')
 plt.ylabel('Modellierte UFP-Konzentration [#/cm^3]')
 plt.show()
 
@@ -183,14 +180,11 @@ print("R² Score: {:.2f}".format(linear_regressor.score(feature, result)))
 print("\n")
 
 ## Multivariate Regression mit ordinalen Prädiktoren
-from sklearn.compose import ColumnTransformer
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
-from sklearn.ensemble import RandomForestRegressor
 
 t = ColumnTransformer(transformers=[
     ('onehot', OneHotEncoder(), ['street_class']),
     ('scale', StandardScaler(), ['tot_traffic']),
-])#, remainder='passthrough')
+])
 
 features = t.fit_transform(traffic_subset)
 result = traffic_subset['ufp']
@@ -199,9 +193,9 @@ result = traffic_subset['ufp']
 linear_regressor = LinearRegression()
 model = linear_regressor.fit(features, result)
 
-Y_pred = linear_regressor.predict(features)
+result_pred = linear_regressor.predict(features)
 
-plt.scatter(Y_pred, result)
+plt.scatter(result_pred, result)
 plt.xlabel('Modellierte UFP-Konzentration [#/cm^3]')
 plt.ylabel('Gemessene UFP-Konzentration [#/cm^3]')
 plt.title('Lin. Regression Straßenklasse / Verkehrsaufkommen', fontsize=14)
@@ -231,5 +225,5 @@ print('------ Random Forest Regression -----')
 print("R² Score: {:.2f}".format(rf_reg.score(features, result)))
 print("\n")
 
-# Quelle: https://stackoverflow.com/questions/58163835/make-regression-model-with-categorical-data-with-scikit-learn
-# Nochmal checken, was ich hier eigentlich gemacht habe.
+
+
