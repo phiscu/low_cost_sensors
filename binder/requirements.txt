@@ -22,5 +22,4 @@ statsmodels==0.11.1
 toml==0.10.2
 tornado==6.1
 typing_extensions==4.0.0
-xmlrpclib==1.0.1
 zipp==1.0.0
