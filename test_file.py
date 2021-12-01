@@ -225,5 +225,3 @@ print('------ Random Forest Regression -----')
 print("R² Score: {:.2f}".format(rf_reg.score(features, result)))
 print("\n")
 
-
-
